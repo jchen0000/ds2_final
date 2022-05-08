@@ -184,11 +184,11 @@ model.lda <- train(x, y,
                    trControl = ctrl)
 ```
 
-# Regression Tree
+## Regression Tree
 
-# Support Vector Machine
+## Support Vector Machine
 
-# Neural Network
+## Neural Network
 
 
 
