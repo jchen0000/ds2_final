@@ -1,6 +1,6 @@
 ---
 title: "DSII Midterm Project"
-author: "Yiru Gong, yg2832"
+author: "Yiru Gong, yg2832; Yiwen Zhao, yz4187; Jiaqi Chen, jc5681"
 date: "`r Sys.Date()`"
 output:
   pdf_document:
