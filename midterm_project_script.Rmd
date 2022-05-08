@@ -27,6 +27,7 @@ knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
 ```{r, echo = T, message = FALSE, results='hide', warning=FALSE}
 library(tidyverse)
 library(summarytools)
+library(corrplot)
 library(caret)
 library(MASS)
 library(mlbench)
@@ -106,6 +107,10 @@ corrplot(cor(data[,-c(5,7,8,10,11,17,18)]), method = "circle", type = "full")
 ## Data split
 
 ```{r}
+ctrl <- trainControl(method = "repeatedcv",
+                     summaryFunction = twoClassSummary,
+                     classProbs = TRUE)
+
 set.seed(1)
 rowTrain <- createDataPartition(y = data$covid_vaccination,
                                 p = 0.7,
