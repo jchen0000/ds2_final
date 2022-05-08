@@ -184,6 +184,14 @@ model.lda <- train(x, y,
                    trControl = ctrl)
 ```
 
+# Regression Tree
+
+# Support Vector Machine
+
+# Neural Network
+
+
+
 # Model Comparison
 
 ## CV Compare
