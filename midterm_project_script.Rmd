@@ -98,6 +98,9 @@ featurePlot(x = data[,-c(5,7,8,10,11,17,18)],
                           y = list(relation = "free")),
             plot = "density", pch = "|", 
             auto.key = list(columns = 2))
+
+#correlation
+corrplot(cor(data[,-c(5,7,8,10,11,17,18)]), method = "circle", type = "full")
 ```
 
 ## Data split
@@ -114,20 +117,6 @@ y2 = data$covid_vaccination[-rowTrain]
 ```
 
 # Model fitting
-
-## GLM
-
-```{r}
-ctrl <- trainControl(method = "repeatedcv",
-                     summaryFunction = twoClassSummary,
-                     classProbs = TRUE)
-set.seed(1)
-model.glm <- train(x,y,
-                   method = "glm",
-                   metric = "ROC",
-                   trControl = ctrl)
-summary(model.glm)
-```
 
 ## Penalized logistic regression
 
@@ -177,25 +166,6 @@ plot(model.gam$finalModel)
 # plot(model.gam.proc$finalModel, select = 3)
 ```
 
-
-## MARS
-
-```{r}
-set.seed(1)
-model.mars <- train(x, y,
-                    method = "earth",
-                    tuneGrid = expand.grid(degree = 1:3, 
-                                           nprune = 2:20),
-                    metric = "ROC",
-                    trControl = ctrl)
-
-plot(model.mars)
-model.mars$bestTune
-
-# fig 3
-vip(model.mars$finalModel)
-```
-
 ## LDA
 
 ```{r}
@@ -209,64 +179,13 @@ model.lda <- train(x, y,
                    trControl = ctrl)
 ```
 
-## QDA
-
-```{r}
-data_limit = data[,-c(8,11,18)]
-data2_limit = model.matrix(covid_vaccination~., data_limit)[,-1]
-x_limit = data2_limit[rowTrain,]
-x2_limit = data2_limit[-rowTrain,]
-
-
-set.seed(1)
-model.qda <- train(x_limit, y,
-                   method = "qda",
-                   metric = "ROC",
-                   trControl = ctrl)
-```
-
-## Naive Bayes (NB)
-
-```{r}
-nbGrid <- expand.grid(usekernel = TRUE, #FALSE
-                      fL = 1, 
-                      adjust = seq(.2, 3, by = .2))
-
-set.seed(1)
-model.nb <- train(data[rowTrain,-7], y,
-                  method = "nb",
-                  tuneGrid = nbGrid,
-                  metric = "ROC",
-                  trControl = ctrl)
-
-plot(model.nb)
-model.nb$bestTune
-```
-
-## KNN
-
-```{r}
-set.seed(1)
-model.knn <- train(x, y,
-                   method = "knn",
-                   metric = "ROC",
-                   trControl = ctrl)
-model.knn$bestTune
-```
-
-
 # Model Comparison
 
 ## CV Compare
 ```{r}
-res <- resamples(list(GLM = model.glm, 
-                      GLMNET = model.glmn, 
+res <- resamples(list(GLMNET = model.glmn, 
                       GAM = model.gam,
-                      MARS = model.mars,
-                      LDA = model.lda,
-                      QDA = model.qda,
-                      NB = model.nb,
-                      KNN = model.knn))
+                      LDA = model.lda))
 
 #KNN
 summary(res)
@@ -278,45 +197,23 @@ bwplot(res, metric = "ROC")
 ## Test data performance
 
 ```{r}
-glm.pred <- predict(model.glm, newdata = x2, type = "prob")[,2]
 glmn.pred <- predict(model.glmn, newdata = x2, type = "prob")[,2]
 gam.pred <- predict(model.gam, newdata = data[-rowTrain,-c(7:8)], type = "prob")[,2]
-mars.pred <- predict(model.mars, newdata = x2, type = "prob")[,2]
 lda.pred <- predict(model.lda, newdata = x2, type = "prob")[,2]
-qda.pred <- predict(model.qda, newdata = x2_limit, type = "prob")[,2]
-nb.pred <- predict(model.nb, newdata = data[-rowTrain,-7], type = "prob")[,2]
-knn.pred <- predict(model.knn, newdata = x2, type = "prob")[,2]
 
-roc.glm <- roc(y2, glm.pred)
 roc.glmn <- roc(y2, glmn.pred)
 roc.gam <- roc(y2, gam.pred)
-roc.mars <- roc(y2, mars.pred)
 roc.lda <- roc(y2, lda.pred)
-roc.qda <- roc(y2, qda.pred)
-roc.nb <- roc(y2, nb.pred)
-roc.knn <- roc(y2, knn.pred)
 
-auc <- c(roc.glm$auc[1], roc.glmn$auc[1], roc.gam$auc[1], roc.mars$auc[1], roc.lda$auc[1], roc.qda$auc[1], roc.nb$auc[1], roc.knn$auc[1])
+auc <- c(roc.glmn$auc[1], roc.gam$auc[1], roc.lda$auc[1])
 
-modelNames <- c("glm","glmn","gam","mars","lda","qda","nb","knn")
+modelNames <- c("glmn","gam","lda")
 
 # fig 5
-ggroc(list(roc.glm, roc.glmn, roc.gam, roc.mars, roc.lda, roc.qda, roc.nb, roc.knn), legacy.axes = TRUE) + 
+ggroc(list(roc.glmn, roc.gam, roc.lda), legacy.axes = TRUE) + 
   scale_color_discrete(labels = paste0(modelNames, " (", round(auc,3),")"),
                        name = "Models (AUC)") +
   geom_abline(intercept = 0, slope = 1, color = "grey")
 ```
 
-## model evaluation
-
-```{r}
-gam.pred <- predict(model.gam, newdata = data[-rowTrain,-c(7:8)], type = "prob")[,2]
-test.pred <- rep("no_vacc", length(gam.pred))
-test.pred[gam.pred>0.5] <- "vacc"
-
-cm = confusionMatrix(data = factor(test.pred),
-                reference = y2,
-                positive = "vacc")
-cm
-```
 
