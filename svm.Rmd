@@ -1,0 +1,123 @@
+---
+title: "svm"
+author: "Yiwen Zhao"
+date: "5/8/2022"
+output: html_document
+---
+
+```{r, echo = T, message = FALSE, results='hide', warning=FALSE}
+library(tidyverse)
+library(caret)
+library(mlbench)
+library(ISLR)
+library(caret)
+library(e1071)
+library(kernlab)
+```
+
+# Data Input
+
+```{r}
+data = read.csv('./Covid19_vacc_predict_handout.csv')
+data = data %>% 
+  na.omit() %>% 
+  dplyr::select(-id) %>% 
+  mutate(
+    atlas_type_2015_mining_no = factor(atlas_type_2015_mining_no),
+    covid_vaccination = factor(covid_vaccination),
+    hum_region = factor(hum_region),
+    sex_cd = factor(sex_cd),
+    race_cd = factor(race_cd),
+    lang_spoken_cd = factor(lang_spoken_cd),
+    atlas_low_education_2015_update = factor(atlas_low_education_2015_update)
+    )
+
+ctrl <- trainControl(method = "repeatedcv",
+                     summaryFunction = twoClassSummary,
+                     classProbs = TRUE)
+
+set.seed(1)
+rowTrain <- createDataPartition(y = data$covid_vaccination,
+                                p = 0.1,
+                                list = FALSE)
+```
+
+
+
+
+```{r}
+data$covid_vaccination <- factor(data$covid_vaccination, c("vacc", "no_vacc"))
+dat <- data[-c(5,8,10,11,17,18)]
+summary(dat)
+train <- createDataPartition(y = dat$covid_vaccination,
+                                p = 0.7,
+                                list = FALSE)
+```
+
+Linear
+```{r}
+set.seed(1)
+linear.tune <- tune.svm(covid_vaccination ~ . , 
+                        data = dat[train,], 
+                        kernel = "linear", 
+                        cost = exp(seq(-5,2,len=50)),
+                        scale = TRUE)
+plot(linear.tune)
+```
+
+
+Radial
+```{r}
+set.seed(1)
+radial.tune <- tune.svm(covid_vaccination ~ . , 
+                        data = dat[train,], 
+                        kernel = "radial", 
+                        cost = exp(seq(-1, 4,len=20)),
+                        gamma = exp(seq(-6,-2,len=20)))
+
+plot(radial.tune, transform.y = log, transform.x = log, 
+     color.palette = terrain.colors)
+# summary(radial.tune)
+
+best.radial <- radial.tune$best.model
+summary(best.radial)
+
+pred.radial <- predict(best.radial, newdata = dat[-train,])
+
+confusionMatrix(data = pred.radial, 
+                reference = dat$covid_vaccination[-train])
+```
+
+```{r}
+# kernlab
+ctrl1 <- trainControl(method = "cv")
+set.seed(1)
+svml.fit <- train(covid_vaccination ~ . , 
+                  data = dat[train,], 
+                  method = "svmLinear",
+                  # preProcess = c("center", "scale"),
+                  tuneGrid = data.frame(C = exp(seq(-5,2,len=50))),
+                  trControl = ctrl1)
+
+plot(svml.fit, highlight = TRUE, xTrans = log)
+```
+
+```{r}
+svmr.grid <- expand.grid(C = exp(seq(-1,4,len=20)),
+                         sigma = exp(seq(-6,-2,len=20)))
+
+# tunes over both cost and sigma
+set.seed(1)             
+svmr.fit <- train(covid_vaccination ~ . , dat, 
+                  subset = train,
+                  method = "svmRadialSigma",
+                  tuneGrid = svmr.grid,
+                  trControl = ctrl1)
+
+myCol<- rainbow(20)
+myPar <- list(superpose.symbol = list(col = myCol),
+              superpose.line = list(col = myCol))
+
+plot(svmr.fit, highlight = TRUE, par.settings = myPar)
+```
+
