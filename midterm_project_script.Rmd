@@ -1,3 +1,253 @@
+<<<<<<< HEAD
+---
+title: "DSII Midterm Project"
+author: "Yiru Gong, yg2832; Yiwen Zhao, yz4187; Jiaqi Chen, jc5681"
+date: "`r Sys.Date()`"
+output:
+  pdf_document:
+    toc: yes
+    toc_depth: 2
+  html_document:
+    df_print: paged
+    toc: yes
+    toc_depth: '2'
+header-includes:
+- \usepackage{fancyhdr}
+- \usepackage{lipsum}
+- \pagestyle{fancy}
+- \fancyhead[R]{\thepage}
+- \fancypagestyle{plain}{\pagestyle{fancy}}
+--- 
+
+\newpage
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+```
+
+```{r, echo = T, message = FALSE, results='hide', warning=FALSE}
+library(tidyverse)
+library(summarytools)
+library(corrplot)
+library(caret)
+library(MASS)
+library(mlbench)
+library(pROC) #ROCR
+library(pdp)
+library(vip)
+library(AppliedPredictiveModeling) #for transparentTheme function
+```
+
+# Data Input
+
+```{r,results = 'asis'}
+data = read.csv('Covid19_vacc_predict_handout.csv')
+data = data %>% 
+  na.omit() %>% 
+  dplyr::select(-id) %>% 
+  mutate(
+    atlas_type_2015_mining_no = factor(atlas_type_2015_mining_no),
+    covid_vaccination = factor(covid_vaccination),
+    hum_region = factor(hum_region),
+    sex_cd = factor(sex_cd),
+    race_cd = factor(race_cd),
+    lang_spoken_cd = factor(lang_spoken_cd),
+    atlas_low_education_2015_update = factor(atlas_low_education_2015_update)
+    )
+# summary(data)
+# by(data[,c(5,7,8,10,11,17,18)], data$covid_vaccination, summary)
+dfSummary(data[,c(5,7,8,10,11,17,18)])
+
+# cat_sum = NULL
+# for (n in c(5,8,10,11,17,18)){
+#   cat = data[,c(n,7)]
+#   name = colnames(cat)[1]
+#   cat2 = cat %>% 
+#     group_by(covid_vaccination,cat[,1]) %>% 
+#     count() %>% 
+#     rename(cat=`cat[, 1]`) %>% 
+#     pivot_wider(
+#       names_from = covid_vaccination,
+#       values_from = n
+#     ) %>% 
+#     mutate(variable = name) %>% 
+#     relocate(variable,everything())
+#   cat_sum = rbind(cat_sum,cat2)
+# }
+# knitr::kable(cat_sum)
+
+# cat_sum %>% 
+#   pivot_longer(
+#     c("no_vacc","vacc"),
+#     names_to = 'covid_vaccination',
+#     values_to = 'count'
+#   ) %>% 
+#   ggplot(aes(variable,count,group=covid_vaccination,fill=cat))+geom_bar(stat = 'identity') 
+
+data2 = model.matrix(covid_vaccination ~ ., data)[ ,-1]
+```
+
+# Exploratory analysis
+
+```{r,fig.width=12,fig.height=9}
+theme1 <- transparentTheme(trans = .4)
+trellis.par.set(theme1)
+
+#figure 1
+featurePlot(x = data[,-c(5,7,8,10,11,17,18)], 
+            y = data$covid_vaccination,
+            scales = list(x = list(relation = "free"), 
+                          y = list(relation = "free")),
+            plot = "density", pch = "|", 
+            auto.key = list(columns = 2))
+
+#correlation
+corrplot(cor(data[,-c(5,7,8,10,11,17,18)]), method = "circle", type = "full")
+```
+
+## Data split
+
+```{r}
+ctrl <- trainControl(method = "repeatedcv",
+                     summaryFunction = twoClassSummary,
+                     classProbs = TRUE)
+
+set.seed(1)
+rowTrain <- createDataPartition(y = data$covid_vaccination,
+                                p = 0.7,
+                                list = FALSE)
+x = data2[rowTrain,]
+y = data$covid_vaccination[rowTrain]
+x2 = data2[-rowTrain,]
+y2 = data$covid_vaccination[-rowTrain]
+```
+
+# Model fitting
+
+## Penalized logistic regression
+
+```{r}
+glmnGrid <- expand.grid(.alpha = seq(0, 1, length = 21),
+                        .lambda = exp(seq(-8, -1, length = 50)))
+set.seed(1)
+model.glmn <- train(x, y,
+                    method = "glmnet",
+                    tuneGrid = glmnGrid,
+                    metric = "ROC",
+                    trControl = ctrl)
+
+model.glmn$bestTune
+
+myCol<- rainbow(25)
+myPar <- list(superpose.symbol = list(col = myCol),
+              superpose.line = list(col = myCol))
+
+plot(model.glmn, par.settings = myPar, xTrans = function(x) log(x))
+```
+
+## GAM
+
+```{r,fig.width=9,fig.height=12}
+set.seed(1)
+model.gam <- train(data[rowTrain,-c(7:8)], y,
+                   method = "gam",
+                   metric = "ROC",
+                   trControl = ctrl)
+### row 8: hum_region report error
+
+model.gam$finalModel
+
+# fig 2
+par(mfrow=c(4,3))
+plot(model.gam$finalModel)
+```
+
+```{r}
+# ## add data preprocessing
+# model.gam.proc <- train(data[rowTrain,-c(7:8)], y,
+#                         preProcess = c("zv"),
+#                    method = "gam",
+#                    metric = "ROC",
+#                    trControl = ctrl)
+# plot(model.gam.proc$finalModel, select = 3)
+```
+
+## LDA
+
+```{r}
+lda.fit <- lda(y~x)
+plot(lda.fit)
+
+set.seed(1)
+model.lda <- train(x, y,
+                   method = "lda",
+                   metric = "ROC",
+                   trControl = ctrl)
+```
+
+## Random Forest
+```{r}
+rf.ctrl <- trainControl(method = "cv",
+                     classProbs = TRUE,
+                     summaryFunction = twoClassSummary)
+
+rf.grid <- expand.grid(mtry = 1:8,
+                       splitrule = "gini",
+                       min.node.size = seq(from = 2, to = 10,
+                                           by = 2))
+
+set.seed(1)
+rf.fit <- train(covid_vaccination ~ . ,
+                data,
+                subset = rowTrain,
+                method = "ranger",
+                tuneGrid = rf.grid,
+                metric = "ROC",
+                trControl = rf.ctrl)
+
+ggplot(rf.fit, highlight = TRUE)
+```
+
+
+# Model Comparison
+
+## CV Compare
+```{r}
+res <- resamples(list(GLMNET = model.glmn, 
+                      GAM = model.gam,
+                      LDA = model.lda))
+
+#KNN
+summary(res)
+
+# figure 4
+bwplot(res, metric = "ROC")
+```
+
+## Test data performance
+
+```{r}
+glmn.pred <- predict(model.glmn, newdata = x2, type = "prob")[,2]
+gam.pred <- predict(model.gam, newdata = data[-rowTrain,-c(7:8)], type = "prob")[,2]
+lda.pred <- predict(model.lda, newdata = x2, type = "prob")[,2]
+
+roc.glmn <- roc(y2, glmn.pred)
+roc.gam <- roc(y2, gam.pred)
+roc.lda <- roc(y2, lda.pred)
+
+auc <- c(roc.glmn$auc[1], roc.gam$auc[1], roc.lda$auc[1])
+
+modelNames <- c("glmn","gam","lda")
+
+# fig 5
+ggroc(list(roc.glmn, roc.gam, roc.lda), legacy.axes = TRUE) + 
+  scale_color_discrete(labels = paste0(modelNames, " (", round(auc,3),")"),
+                       name = "Models (AUC)") +
+  geom_abline(intercept = 0, slope = 1, color = "grey")
+```
+
+
+=======
 ---
 title: "DSII Midterm Project"
 author: "Yiru Gong, yg2832"
@@ -290,3 +540,4 @@ ggroc(list(roc.glmn, roc.gam, roc.lda, roc.nn), legacy.axes = TRUE) +
 ```
 
 
+>>>>>>> ab0d6043d572051e0ced0ee309c42b3f24c130fb
