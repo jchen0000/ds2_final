@@ -184,6 +184,30 @@ model.lda <- train(x, y,
                    trControl = ctrl)
 ```
 
+## Random Forest
+```{r}
+rf.ctrl <- trainControl(method = "cv",
+                     classProbs = TRUE,
+                     summaryFunction = twoClassSummary)
+
+rf.grid <- expand.grid(mtry = 1:8,
+                       splitrule = "gini",
+                       min.node.size = seq(from = 2, to = 10,
+                                           by = 2))
+
+set.seed(1)
+rf.fit <- train(covid_vaccination ~ . ,
+                data,
+                subset = rowTrain,
+                method = "ranger",
+                tuneGrid = rf.grid,
+                metric = "ROC",
+                trControl = rf.ctrl)
+
+ggplot(rf.fit, highlight = TRUE)
+```
+
+
 # Model Comparison
 
 ## CV Compare
