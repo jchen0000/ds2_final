@@ -35,6 +35,8 @@ library(pROC) #ROCR
 library(pdp)
 library(vip)
 library(AppliedPredictiveModeling) #for transparentTheme function
+library(keras)
+library(tfruns)
 ```
 
 # Data Input
@@ -107,10 +109,6 @@ corrplot(cor(data[,-c(5,7,8,10,11,17,18)]), method = "circle", type = "full")
 ## Data split
 
 ```{r}
-ctrl <- trainControl(method = "repeatedcv",
-                     summaryFunction = twoClassSummary,
-                     classProbs = TRUE)
-
 set.seed(1)
 rowTrain <- createDataPartition(y = data$covid_vaccination,
                                 p = 0.7,
@@ -119,13 +117,19 @@ x = data2[rowTrain,]
 y = data$covid_vaccination[rowTrain]
 x2 = data2[-rowTrain,]
 y2 = data$covid_vaccination[-rowTrain]
+
+save(x,y,x2,y2,file = "split_data.Rdata")
 ```
 
 # Model fitting
 
-## Penalized logistic regression
+## Penalized logistic regression (GLMNET)
 
 ```{r}
+ctrl <- trainControl(method = "repeatedcv",
+                     summaryFunction = twoClassSummary,
+                     classProbs = TRUE)
+
 glmnGrid <- expand.grid(.alpha = seq(0, 1, length = 21),
                         .lambda = exp(seq(-8, -1, length = 50)))
 set.seed(1)
@@ -190,6 +194,59 @@ model.lda <- train(x, y,
 
 ## Neural Network
 
+```{r}
+## tuning
+set.seed(1)
+runs <- tuning_run("keras_grid_search.R", 
+                   flags = list(
+                   nodes_layer1 = c(64, 128, 256),
+                   nodes_layer2 = c(64, 128, 256),
+                   nodes_layer3 = c(64, 128, 256),
+                   dropout_layer1 = c(0.2, 0.3, 0.4),
+                   dropout_layer2 = c(0.2, 0.3, 0.4),
+                   dropout_layer3 = c(0.2, 0.3, 0.4)),
+                   confirm = FALSE,
+                   echo = FALSE,
+                   sample = 0.01) # try more after class
+
+best = runs[which.max(runs$metric_val_accuracy),] 
+```
+
+```{r}
+y_c = ifelse(y=="vacc",1,0)
+y_c <- to_categorical(y_c, 2)
+y2_c = ifelse(y2=="vacc",1,0)
+y2_c <- to_categorical(y2_c, 2)
+
+model.nn <- keras_model_sequential() %>%
+  layer_dense(units = best$flag_nodes_layer1, activation = "relu", input_shape = ncol(x)) %>%
+  layer_batch_normalization() %>%
+  layer_dropout(rate = best$flag_dropout_layer1) %>%
+  layer_dense(units = best$flag_nodes_layer2, activation = "relu") %>%
+  layer_batch_normalization() %>%
+  layer_dropout(rate = best$flag_dropout_layer2) %>%
+  layer_dense(units = best$flag_nodes_layer3, activation = "relu") %>%
+  layer_batch_normalization() %>%
+  layer_dropout(rate = best$flag_dropout_layer3) %>%
+  layer_dense(units = 2, activation = "sigmoid") %>%
+  compile(loss = "categorical_crossentropy",
+          optimizer = optimizer_rmsprop(), 
+          metrics = "accuracy") 
+fit.nn = model.nn %>% 
+  fit(x = x, 
+      y = y_c, 
+      epochs = 30, 
+      batch_size = 256,
+      validation_split = 0.2,
+      callbacks = list(callback_early_stopping(patience = 5),
+                       callback_reduce_lr_on_plateau()),
+      verbose = 2)
+plot(model.nn)
+
+## testing and evaluation
+score <- model.nn %>% evaluate(x2, y2_c)
+score
+```
 
 
 # Model Comparison
@@ -213,17 +270,20 @@ bwplot(res, metric = "ROC")
 glmn.pred <- predict(model.glmn, newdata = x2, type = "prob")[,2]
 gam.pred <- predict(model.gam, newdata = data[-rowTrain,-c(7:8)], type = "prob")[,2]
 lda.pred <- predict(model.lda, newdata = x2, type = "prob")[,2]
+pred_test <- nn %>% predict(x2)
+nn.pred = pred_test[,2]
 
 roc.glmn <- roc(y2, glmn.pred)
 roc.gam <- roc(y2, gam.pred)
 roc.lda <- roc(y2, lda.pred)
+roc.nn = roc(y2,nn.pred)
 
-auc <- c(roc.glmn$auc[1], roc.gam$auc[1], roc.lda$auc[1])
+auc <- c(roc.glmn$auc[1], roc.gam$auc[1], roc.lda$auc[1], roc.nn$auc[1])
 
-modelNames <- c("glmn","gam","lda")
+modelNames <- c("glmn","gam","lda","nn")
 
 # fig 5
-ggroc(list(roc.glmn, roc.gam, roc.lda), legacy.axes = TRUE) + 
+ggroc(list(roc.glmn, roc.gam, roc.lda, roc.nn), legacy.axes = TRUE) + 
   scale_color_discrete(labels = paste0(modelNames, " (", round(auc,3),")"),
                        name = "Models (AUC)") +
   geom_abline(intercept = 0, slope = 1, color = "grey")
