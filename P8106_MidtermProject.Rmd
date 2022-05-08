@@ -1,0 +1,238 @@
+---
+title: "P8106_MidtermProject"
+author: "Yiwen Zhao"
+date: "3/26/2022"
+output: 
+  pdf_document:
+    toc: yes
+    toc_depth: 2
+  html_document:
+    df_print: paged
+    toc: yes
+    toc_depth: '2'
+header-includes:
+- \usepackage{fancyhdr}
+- \usepackage{lipsum}
+- \pagestyle{fancy}
+- \fancyhead[R]{\thepage}
+- \fancypagestyle{plain}{\pagestyle{fancy}}
+---
+
+```{r, message=FALSE, results='hide'}
+library(caret)
+library(doBy)
+library(glmnet)
+library(pROC)
+library(pdp)
+library(vip)
+library(AppliedPredictiveModeling)
+library(MASS)
+library(klaR)
+library(tidyverse)
+library(corrplot)
+library(earth)
+```
+
+
+### Data Cleaning
+```{r, preparing data}
+data <- read.csv("Covid19_vacc_predict_handout.csv") %>%
+  janitor::clean_names() %>%
+  na.omit() %>%
+  mutate(covid_vaccination = as.factor(covid_vaccination),
+         sex_cd = as.factor(sex_cd),
+         lang_spoken_cd = as.factor(lang_spoken_cd)) %>%
+  select(id,cons_chmi,est_age,atlas_percapitainc,rwjf_uninsured_adults_pct,
+         atlas_type_2015_mining_no,atlas_povertyallagespct,hum_region,
+         atlas_hh65plusalonepct, sex_cd, lang_spoken_cd,atlas_pct_sbp15,
+         rwjf_resident_seg_black_inx,cons_rxadhm,atlas_medhhinc,cons_lwcm07,
+         atlas_low_education_2015_update,race_cd,covid_vaccination)
+
+dat <- data[-c(1, 8, 10, 11)]
+
+dim(dat)
+summary(dat)
+head(dat)
+
+set.seed(1)
+train <- createDataPartition(y = dat$covid_vaccination,
+                             p = 0.7,
+                             list = FALSE)
+```
+
+
+### Visualization
+```{r}
+# data visualization
+theme1 <- transparentTheme(trans = .4)
+trellis.par.set(theme1)
+
+featurePlot(x = dat[, 1:14], 
+            y = dat$covid_vaccination,
+            scales = list(x = list(relation = "free"), 
+                          y = list(relation = "free")),
+            plot = "density", pch = "|", 
+            auto.key = list(columns = 2))
+
+corrplot(cor(dat[,1:14]), method = "circle", type = "full")
+```
+
+### Logistic Regression: GLM
+```{r, message=FALSE,warning=FALSE}
+# GLM 
+contrasts(dat$covid_vaccination)
+
+glm.fit <- glm(covid_vaccination ~ ., 
+               data = dat, 
+               subset = train, 
+               family = binomial(link = "logit"))
+
+summary(glm.fit)
+
+test.pred.prob <- predict(glm.fit, newdata = dat[-train,],
+                           type = "response")
+test.pred <- rep("no_vacc", length(test.pred.prob))
+
+confusionMatrix(data = as.factor(test.pred),
+                reference = dat$covid_vaccination[-train],
+                positive = "vacc")                             #sensitivity is 0
+
+roc.glm <- roc(dat$covid_vaccination[-train], test.pred.prob)
+plot(roc.glm, legacy.axes = TRUE, print.auc = TRUE)
+plot(smooth(roc.glm), col = 4, add = TRUE)
+
+# caret
+ctrl <- trainControl(method = "repeatedcv",
+                     summaryFunction = twoClassSummary,
+                     classProbs = TRUE)
+set.seed(1)
+model.glm <- train(x = dat[train,1:7],
+                   y = dat$covid_vaccination[train],
+                   method = "glm",
+                   metric = "ROC",
+                   trControl = ctrl)
+```
+
+
+### Penalized Logistic Regression
+```{r, warning=FALSE}
+glmnGrid <- expand.grid(.alpha = seq(0, 1, length = 21),
+                        .lambda = exp(seq(-8, -1, length = 50)))
+set.seed(1)
+model.glmn <- train(x = dat[train,1:14],
+                    y = dat$covid_vaccination[train],
+                    method = "glmnet",
+                    tuneGrid = glmnGrid,
+                    metric = "ROC",
+                    trControl = ctrl)
+
+model.glmn$bestTune
+
+myCol <- rainbow(25)
+myPar <- list(superpose.symbol = list(col = myCol),
+              superpose.line = list(col = myCol))
+
+plot(model.glmn, par.settings = myPar, xTrans = function(x) log(x))
+```
+
+
+### MARS
+```{r, warning=FALSE}
+set.seed(1)
+model.mars <- train(x = dat[train,1:14],
+                    y = dat$covid_vaccination[train],
+                    method = "earth",
+                    tuneGrid = expand.grid(degree = 1:3, 
+                                           nprune = 2:20),
+                    metric = "ROC",
+                    trControl = ctrl)
+
+plot(model.mars)
+coef(model.mars$finalModel) 
+vip(model.mars$finalModel)
+```
+
+
+### LDA
+```{r}
+lda.fit <- lda(covid_vaccination~., data = dat,
+               subset = train)
+plot(lda.fit)
+
+lda.fit$scaling
+
+head(predict(lda.fit)$x)
+mean(predict(lda.fit)$x)
+
+lda.pred <- predict(lda.fit, newdata = dat[-train,])
+head(lda.pred$posterior)
+
+# caret
+set.seed(1)
+model.lda <- train(x = dat[train,1:14],
+                   y = dat$covid_vaccination[train],
+                   method = "lda",
+                   metric = "ROC",
+                   trControl = ctrl)
+```
+
+
+### QDA
+```{r}
+qda.fit <- qda(covid_vaccination~., data = dat,
+               subset = train)
+
+qda.pred <- predict(qda.fit, newdata = dat[-train,])
+head(qda.pred$posterior)
+
+set.seed(1)
+model.qda <- train(x = dat[train,1:14],
+                   y = dat$covid_vaccination[train],
+                   method = "qda",
+                   metric = "ROC",
+                   trControl = ctrl)
+```
+
+
+
+### Resample
+```{r}
+# resample
+res <- resamples(list(MARS = model.mars,
+                      GLM = model.glm,
+                      GLMN = model.glmn,
+                      LDA = model.lda, 
+                      QDA = model.qda))
+summary(res)
+bwplot(res, metric = "ROC")
+```
+
+
+
+### ROC Curve
+```{r, message=FALSE}
+glm.pred <- predict(model.glm, newdata = dat[-train,], type = "prob")[,2]
+glmn.pred <- predict(model.glmn, newdata = dat[-train,], type = "prob")[,2]
+lda.pred <- predict(model.lda, newdata = dat[-train,], type = "prob")[,2]
+qda.pred <- predict(model.qda, newdata = dat[-train,], type = "prob")[,2]
+mars.pred <- predict(model.mars, newdata = dat[-train,], type = "prob")[,2]
+
+roc.glm <- roc(dat$covid_vaccination[-train], glm.pred)
+roc.glmn <- roc(dat$covid_vaccination[-train], glmn.pred)
+roc.lda <- roc(dat$covid_vaccination[-train], lda.pred)
+roc.qda <- roc(dat$covid_vaccination[-train], qda.pred)
+roc.mars <- roc(dat$covid_vaccination[-train], mars.pred)
+
+auc <- c(roc.glm$auc[1], roc.glmn$auc[1], 
+         roc.lda$auc[1], roc.qda$auc[1],
+         roc.mars$auc[1])
+
+modelNames <- c("glm","glmn","lda","qda", "mars")
+
+ggroc(list(roc.glm, roc.glmn, roc.lda, roc.qda, roc.mars), legacy.axes = TRUE) + 
+  scale_color_discrete(labels = paste0(modelNames, " (", round(auc,3),")"),
+                       name = "Models (AUC)") +
+  geom_abline(intercept = 0, slope = 1, color = "grey")
+
+```
+

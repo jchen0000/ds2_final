@@ -1,0 +1,223 @@
+---
+title: "midterm_project_code"
+author: "Jiaqi Chen"
+date: "3/26/2022"
+output: pdf_document
+---
+
+
+```{r}
+library(caret)
+library(tidyverse)
+library(base)
+library(AppliedPredictiveModeling)
+library(pdp)
+library(vip)
+library(klaR)
+library(pROC)
+library(dplyr)
+library(glmnet)
+```
+
+# Data Entry and Cleanning 
+```{r}
+data = read.csv('Covid19_vacc_predict_handout.csv') %>%
+  mutate(covid_vaccination = as.factor(covid_vaccination)) %>%
+  dplyr::select(-id) 
+
+nonchr_data = data %>% 
+  dplyr::select(-hum_region & -sex_cd & -lang_spoken_cd)
+```
+I used the COVID19 vaccination data for illustration. The data contain 8308 observations and 19 variables. The outcome is binary variable `covid_vaccination`: vacc means vaccinated and no-vacc means not vaccinated.
+
+## Split the dataset into two parts: training data (70%) and test data (30%)
+```{r}
+set.seed(1)
+train = createDataPartition(y = data$covid_vaccination, p = 0.7, list = FALSE)
+
+x = data[, -7]
+y = data$covid_vaccination
+
+# Training Data
+x1 = model.matrix(covid_vaccination ~., data)[train,-1]
+y1 = data$covid_vaccination[train]
+
+# Test Data
+x2 = model.matrix(covid_vaccination ~., data)[-train,-1]
+y2 = data$covid_vaccination[-train]
+```
+
+# Data Visualization
+
+## Produce some graphical or numerical summaries of the data
+```{r}
+theme1 = transparentTheme(trans = .4)
+trellis.par.set(theme1)
+
+nonchr_x = nonchr_data[, -7]
+nonchr_y = nonchr_data$covid_vaccination
+
+plot1 = featurePlot(nonchr_x, nonchr_y, 
+                    scales = list(x = list(relation = "free"), 
+                                  y = list(relation = "free")),
+                    plot = "density", pch = "|",
+                    auto.key = list(columns = 2))
+
+plot1  
+```
+
+
+# Logistic Regression (GLM)
+
+```{r}
+contrasts(data$covid_vaccination) #no_vacc-0, vacc-1
+```
+
+## Fit a logistic regression model
+```{r}
+set.seed(1)
+ctrl = trainControl(method = "repeatedcv",
+                    summaryFunction = twoClassSummary,
+                    classProbs = TRUE)
+
+model.glm = train(x1, y1,
+                  method = "glm",
+                  metric = "ROC",
+                  trControl = ctrl)
+
+summary(model.glm)
+```
+
+From the summary of GLM model, we can see that residual deviance is 5611.8, close to 5779 degrees of freedom. Therefore, GLM model is a good fit. 
+
+In this model, `est_age`, `rwjf_uninsured_adults_pct`, `hum_regionCENTRAL WEST`, `hum_regionFLORIDA`, `hum_regionFLORIDA`, `hum_regionMID-SOUTH`, `hum_regionTEXAS`, `cons_lwcm07` are statistically significant predictors, since the p-value of these three predictors are less than 0.05.
+
+## Confusion Matrix
+```{r}
+test.pred.prob = predict(model.glm,
+                         newdata = x2,
+                         type = "prob")[,2]
+
+test.pred = rep("no_vacc", length(test.pred.prob))
+test.pred[test.pred.prob > 0.5] = "vacc"
+
+confusionMatrix(data = as.factor(test.pred),
+                reference = y2,
+                positive = "vacc")
+
+
+```
+
+
+## Plot the test ROC curve
+```{r}
+roc.glm = roc(data$covid_vaccination[-train], test.pred.prob)
+plot(roc.glm, legacy.axes = TRUE, print.auc = TRUE)
+plot(smooth(roc.glm), col = 4, add = TRUE)
+```
+
+
+# Penalized logistic regression (GLMN)
+
+## Fit a GLMN model
+```{r}
+glmnGrid = expand.grid(.alpha = seq(0, 1, length = 21),
+                       .lambda = exp(seq(-8, -1, length = 50)))
+
+set.seed(1)
+model.glmn = train(x1, y1,
+                   method = "glmnet",
+                   tuneGrid = glmnGrid,
+                   metric = "ROC",
+                   trControl = ctrl)
+
+model.glmn$bestTune
+```
+
+```{r}
+myCol = rainbow(25)
+myPar = list(superpose.symbol = list(col = myCol),
+             superpose.line = list(col = myCol))
+
+plot(model.glmn, par.settings = myPar, xTrans = function(x) log(x))
+```
+
+
+# GAM 
+
+## Fit a GAM Model
+```{r}
+set.seed(1)
+
+gam_x = model.matrix(covid_vaccination ~., nonchr_data)[train,-1]
+test_gam_x = model.matrix(covid_vaccination ~., nonchr_data)[-train, -1]
+
+model.gam = train(gam_x, y1,
+                  method = "gam",
+                  metric = "ROC",
+                  trControl = ctrl) 
+
+model.gam$finalModel
+
+plot(model.gam$finalModel, select = 3)
+```
+
+# MARS
+
+```{r, warning = FALSE}
+set.seed(1)
+model.mars = train(x1, y1,
+                   method = "earth",
+                   tuneGrid = expand.grid(degree = 1:4,
+                                          nprune = 2:20),
+                   metric = "ROC",
+                   trControl = ctrl)
+
+plot(model.mars)
+
+model.mars$bestTune
+
+coef(model.mars$finalModel)
+
+vip(model.mars$finalModel)
+```
+
+# Compare Model
+```{r}
+res = resamples(list(GLM = model.glm,
+                     GLMNET = model.glmn,
+                     GAM = model.gam,
+                     MARS = model.mars))
+
+summary(res)
+
+bwplot(res, metric = "ROC")
+```
+
+# Test Data Performance
+
+```{r}
+glm.pred = predict(model.glm, newdata = x2, type = "prob")[,2]
+glmn.pred = predict(model.glmn, newdata = x2, type = "prob")[,2]
+gam.pred = predict(model.gam, newdata = test_gam_x, type = "prob")[,2]
+mars.pred = predict(model.mars, newdata = x2, type = "prob")[,2]
+
+roc.glm = roc(data$covid_vaccination[-train], glm.pred)
+roc.glmn = roc(data$covid_vaccination[-train], glmn.pred)
+roc.gam = roc(data$covid_vaccination[-train], gam.pred)
+roc.mars = roc(data$covid_vaccination[-train], mars.pred)
+
+auc = c(roc.glm$auc[1], roc.glmn$auc[1],
+roc.gam$auc[1], roc.mars$auc[1])
+
+modelNames = c("glm","glmn","gam","mars")
+
+ggroc(list(roc.glm, roc.glmn, roc.gam, roc.mars), legacy.axes = TRUE) +
+  scale_color_discrete(labels = paste0(modelNames, " (", round(auc,3),")"), name = "Models (AUC)") +
+geom_abline(intercept = 0, slope = 1, color = "grey")
+```
+
+
+
+
+
