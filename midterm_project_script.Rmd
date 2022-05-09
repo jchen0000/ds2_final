@@ -37,6 +37,10 @@ library(vip)
 library(AppliedPredictiveModeling) #for transparentTheme function
 library(keras)
 library(tfruns)
+library(ISLR)
+library(caret)
+library(e1071)
+library(kernlab)
 ```
 
 # Data Input
@@ -213,6 +217,64 @@ ggplot(rf.fit, highlight = TRUE)
 
 ## Support Vector Machine
 
+```{r}
+data$covid_vaccination <- factor(data$covid_vaccination, c("vacc", "no_vacc"))
+dat <- data[-c(5,8,10,11,17,18)]
+summary(dat)
+train <- createDataPartition(y = dat$covid_vaccination,
+                                p = 0.7,
+                                list = FALSE)
+
+# Radial
+set.seed(1)
+radial.tune <- tune.svm(covid_vaccination ~ . , 
+                        data = dat[train,], 
+                        kernel = "radial", 
+                        cost = exp(seq(-1, 4,len=20)),
+                        gamma = exp(seq(-6,-2,len=20)))
+
+plot(radial.tune, transform.y = log, transform.x = log, 
+     color.palette = terrain.colors)
+# summary(radial.tune)
+
+best.radial <- radial.tune$best.model
+summary(best.radial)
+
+pred.radial <- predict(best.radial, newdata = dat[-train,])
+
+confusionMatrix(data = pred.radial, 
+                reference = dat$covid_vaccination[-train])
+
+# kernlab
+ctrl1 <- trainControl(method = "cv")
+set.seed(1)
+svml.fit <- train(covid_vaccination ~ . , 
+                  data = dat[train,], 
+                  method = "svmLinear",
+                  # preProcess = c("center", "scale"),
+                  tuneGrid = data.frame(C = exp(seq(-5,2,len=50))),
+                  trControl = ctrl1)
+
+plot(svml.fit, highlight = TRUE, xTrans = log)
+```
+
+```{r}
+svmr.grid <- expand.grid(C = exp(seq(-1,4,len=20)),
+                         sigma = exp(seq(-6,-2,len=20)))
+
+set.seed(1)             
+svmr.fit <- train(covid_vaccination ~ . , dat, 
+                  subset = train,
+                  method = "svmRadialSigma",
+                  tuneGrid = svmr.grid,
+                  trControl = ctrl1)
+
+myCol<- rainbow(20)
+myPar <- list(superpose.symbol = list(col = myCol),
+              superpose.line = list(col = myCol))
+
+plot(svmr.fit, highlight = TRUE, par.settings = myPar)
+```
 
 
 ## Neural Network
