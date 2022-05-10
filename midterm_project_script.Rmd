@@ -343,8 +343,7 @@ res <- resamples(list(GLMNET = model.glmn,
                       LDA = model.lda,
                       RF = rf.fit,
                       SVML = svml.fit,
-                      SVMR = svmr.fit,
-                      NN = fit.nn))
+                      SVMR = svmr.fit))
 
 #KNN
 summary(res)
