@@ -323,6 +323,11 @@ bwplot(res, metric = "ROC")
 glmn.pred <- predict(model.glmn, newdata = x2, type = "prob")[,2]
 gam.pred <- predict(model.gam, newdata = data[-rowTrain,-c(7:8)], type = "prob")[,2]
 lda.pred <- predict(model.lda, newdata = x2, type = "prob")[,2]
+rf.pred <- predict(rf.fit, newdata = x2, type = "prob")[,2]
+
+svml.pred <- predict(svml.fit, newdata = dat[-rowTrain,], type = "prob")[,2]
+svmr.pred <- predict(svmr.fit, newdata = dat[-rowTrain,], type = "prob")[,2]
+
 pred_test <- nn %>% predict(x2)
 nn.pred = pred_test[,2]
 
