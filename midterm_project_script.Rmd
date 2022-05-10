@@ -305,7 +305,7 @@ gam.pred <- predict(model.gam, newdata = data[-rowTrain,-c(7:8)], type = "prob")
 lda.pred <- predict(model.lda, newdata = x2, type = "prob")[,2]
 rf.pred <- predict(rf.fit, newdata = data[-rowTrain,], type = "prob")[,2]
 
-svml.pred <- predict(svml.fit, newdata = dat[-rowTrain,], type = "prob")[,2]
+svml.pred <- predict(svml.fit, newdata = dat[-rowTrain,], type = "raw")
 svmr.pred <- predict(svmr.fit, newdata = dat[-rowTrain,], type = "prob")[,2]
 
 pred_test <- nn %>% predict(x2)
