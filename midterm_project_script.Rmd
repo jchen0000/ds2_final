@@ -59,35 +59,7 @@ data = data %>%
     lang_spoken_cd = factor(lang_spoken_cd),
     atlas_low_education_2015_update = factor(atlas_low_education_2015_update)
     )
-# summary(data)
-# by(data[,c(5,7,8,10,11,17,18)], data$covid_vaccination, summary)
 dfSummary(data[,c(5,7,8,10,11,17,18)])
-
-# cat_sum = NULL
-# for (n in c(5,8,10,11,17,18)){
-#   cat = data[,c(n,7)]
-#   name = colnames(cat)[1]
-#   cat2 = cat %>% 
-#     group_by(covid_vaccination,cat[,1]) %>% 
-#     count() %>% 
-#     rename(cat=`cat[, 1]`) %>% 
-#     pivot_wider(
-#       names_from = covid_vaccination,
-#       values_from = n
-#     ) %>% 
-#     mutate(variable = name) %>% 
-#     relocate(variable,everything())
-#   cat_sum = rbind(cat_sum,cat2)
-# }
-# knitr::kable(cat_sum)
-
-# cat_sum %>% 
-#   pivot_longer(
-#     c("no_vacc","vacc"),
-#     names_to = 'covid_vaccination',
-#     values_to = 'count'
-#   ) %>% 
-#   ggplot(aes(variable,count,group=covid_vaccination,fill=cat))+geom_bar(stat = 'identity') 
 
 data2 = model.matrix(covid_vaccination ~ ., data)[ ,-1]
 ```
@@ -169,16 +141,6 @@ par(mfrow=c(4,3))
 plot(model.gam$finalModel)
 ```
 
-```{r}
-# ## add data preprocessing
-# model.gam.proc <- train(data[rowTrain,-c(7:8)], y,
-#                         preProcess = c("zv"),
-#                    method = "gam",
-#                    metric = "ROC",
-#                    trControl = ctrl)
-# plot(model.gam.proc$finalModel, select = 3)
-```
-
 ## LDA
 
 ```{r}
@@ -193,6 +155,7 @@ model.lda <- train(x, y,
 ```
 
 ## Random Forest
+
 ```{r}
 rf.ctrl <- trainControl(method = "cv",
                      classProbs = TRUE,
