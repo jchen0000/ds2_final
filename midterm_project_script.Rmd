@@ -296,16 +296,24 @@ bwplot(res, metric = "ROC")
 ## Test data performance
 
 ```{r}
-glmn.pred <- predict(model.glmn, newdata = x2, type = "prob")[,2]
-gam.pred <- predict(model.gam, newdata = data[-rowTrain,-c(7:8)], type = "prob")[,2]
-lda.pred <- predict(model.lda, newdata = x2, type = "prob")[,2]
-rf.pred <- predict(rf.fit, newdata = data[-rowTrain,], type = "prob")[,2]
+glmn.pred <- predict(model.glmn, newdata = x2, type = "raw")
+gam.pred <- predict(model.gam, newdata = data[-rowTrain,-c(7:8)], type = "raw")
+lda.pred <- predict(model.lda, newdata = x2, type = "raw")
+rf.pred <- predict(rf.fit, newdata = data[-rowTrain,], type = "raw")
 
-svml.pred <- predict(svml.fit, newdata = dat[-rowTrain,], type = "prob")[,2]
-svmr.pred <- predict(svmr.fit, newdata = dat[-rowTrain,], type = "prob")[,2]
+svml.pred <- predict(svml.fit, newdata = dat[-rowTrain,], type = "raw")
+svmr.pred <- predict(svmr.fit, newdata = dat[-rowTrain,], type = "raw")
 
 pred_test <- nn %>% predict(x2)
 nn.pred = pred_test[,2]
+
+# Confusion Matrix
+confusionMatrix(data = glmn.pred, reference = y2, positive = "vacc")
+confusionMatrix(data = gam.pred, reference = y2, positive = "vacc")
+confusionMatrix(data = lda.pred, reference = y2, positive = "vacc")
+confusionMatrix(data = rf.pred, reference = y2, positive = "vacc")
+confusionMatrix(data = svml.pred, reference = y2, positive = "vacc")
+confusionMatrix(data = svmr.pred, reference = y2, positive = "vacc")
 
 roc.glmn <- roc(y2, glmn.pred)
 roc.gam <- roc(y2, gam.pred)
