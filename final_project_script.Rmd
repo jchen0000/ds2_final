@@ -1,5 +1,5 @@
 ---
-title: "DSII Midterm Project"
+title: "DSII Final Project"
 author: "Yiru Gong, yg2832; Yiwen Zhao, yz4187; Jiaqi Chen, jc5681"
 date: "`r Sys.Date()`"
 output:
@@ -297,31 +297,31 @@ bwplot(res, metric = "ROC")
 
 ## Test data performance
 
-```{r}
-# # raw pred
-# glmn.pred <- predict(model.glmn, newdata = x2, type = "raw")
-# gam.pred <- predict(model.gam, newdata = data[-rowTrain,-c(7:8)], type = "raw")
-# lda.pred <- predict(model.lda, newdata = x2, type = "raw")
-# rf.pred <- predict(rf.fit, newdata = data[-rowTrain,], type = "raw")
-# 
-# svml.pred <- predict(svml.fit, newdata = dat[-rowTrain,], type = "raw")
-# svmr.pred <- predict(svmr.fit, newdata = dat[-rowTrain,], type = "raw")
-# 
-# pred_test <- model.nn %>% predict(x2) %>% k_argmax() %>% as.matrix() %>% as.numeric()
-# nn.pred = ifelse(pred_test==0,"no_vacc","vacc")
-# nn.pred = factor(nn.pred,levels = c("no_vacc","vacc"))
-# 
-# # Confusion Matrix
-# cm.glmn = confusionMatrix(data = glmn.pred, reference = y2, positive = "vacc")$overall
-# cm.gam = confusionMatrix(data = gam.pred, reference = y2, positive = "vacc")$overall
-# cm.lda = confusionMatrix(data = lda.pred, reference = y2, positive = "vacc")$overall
-# cm.rf = confusionMatrix(data = rf.pred, reference = y2, positive = "vacc")$overall
-# cm.svml = confusionMatrix(data = svml.pred, reference = y2, positive = "vacc")$overall
-# cm.svmr = confusionMatrix(data = svmr.pred, reference = y2, positive = "vacc")$overall
-# cm.nn = confusionMatrix(data = nn.pred, reference = y2, positive = "vacc")$overall
-# 
-# cm_df = data.frame(GLMN = cm.glmn, GAM = cm.gam, LDA = cm.lda, RF = cm.rf, SVML = cm.svml, SVMR = cm.svmr, NN = cm.nn)
-# knitr::kable(cm_df, digits = 4)
+```{r, results='hide', warning=FALSE}
+# raw pred
+glmn.pred <- predict(model.glmn, newdata = x2, type = "raw")
+gam.pred <- predict(model.gam, newdata = data[-rowTrain,-c(7:8)], type = "raw")
+lda.pred <- predict(model.lda, newdata = x2, type = "raw")
+rf.pred <- predict(rf.fit, newdata = data[-rowTrain,], type = "raw")
+
+svml.pred <- predict(svml.fit, newdata = dat[-rowTrain,], type = "raw")
+svmr.pred <- predict(svmr.fit, newdata = dat[-rowTrain,], type = "raw")
+
+pred_test <- model.nn %>% predict(x2) %>% k_argmax() %>% as.matrix() %>% as.numeric()
+nn.pred = ifelse(pred_test==0,"no_vacc","vacc")
+nn.pred = factor(nn.pred,levels = c("no_vacc","vacc"))
+
+# Confusion Matrix
+cm.glmn = confusionMatrix(data = glmn.pred, reference = y2, positive = "vacc")$overall
+cm.gam = confusionMatrix(data = gam.pred, reference = y2, positive = "vacc")$overall
+cm.lda = confusionMatrix(data = lda.pred, reference = y2, positive = "vacc")$overall
+cm.rf = confusionMatrix(data = rf.pred, reference = y2, positive = "vacc")$overall
+cm.svml = confusionMatrix(data = svml.pred, reference = y2, positive = "vacc")$overall
+cm.svmr = confusionMatrix(data = svmr.pred, reference = y2, positive = "vacc")$overall
+cm.nn = confusionMatrix(data = nn.pred, reference = y2, positive = "vacc")$overall
+
+cm_df = data.frame(GLMN = cm.glmn, GAM = cm.gam, LDA = cm.lda, RF = cm.rf, SVML = cm.svml, SVMR = cm.svmr, NN = cm.nn)
+knitr::kable(cm_df, digits = 4)
 ```
 
 ```{r}
@@ -343,12 +343,19 @@ roc.svml <- roc(y2,svml.pred)
 roc.svmr <- roc(y2,svmr.pred)
 roc.nn = roc(y2,nn.pred)
 
-auc <- c(roc.glmn$auc[1], roc.gam$auc[1], roc.lda$auc[1],roc.rf$auc[1],roc.svml$auc[1],roc.svmr$auc[1], roc.nn$auc[1])
+auc <- c(roc.glmn$auc[1], 
+         roc.gam$auc[1], 
+         roc.lda$auc[1],
+         roc.rf$auc[1],
+         roc.svml$auc[1],
+         roc.svmr$auc[1], 
+         roc.nn$auc[1])
 
 modelNames <- c("glmn","gam","lda","rf","svml","svmr","nn")
 
 # fig 5
-ggroc(list(roc.glmn, roc.gam, roc.lda, roc.rf,roc.svml, roc.svmr, roc.nn), legacy.axes = TRUE) + 
+ggroc(list(roc.glmn, roc.gam, roc.lda, roc.rf,roc.svml, roc.svmr, roc.nn), 
+      legacy.axes = TRUE) + 
   scale_color_discrete(labels = paste0(modelNames, " (", round(auc,3),")"),
                        name = "Models (AUC)") +
   geom_abline(intercept = 0, slope = 1, color = "grey")
