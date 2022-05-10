@@ -177,7 +177,7 @@ rf.fit <- train(covid_vaccination ~ . ,
 
 ggplot(rf.fit, highlight = TRUE)
 
-rf.pred <- predict(rf.fit, newdata = dat[-rowTrain,], type = "prob")[,1]
+rf.pred <- predict(rf.fit, newdata = data[-rowTrain,], type = "prob")[,1]
 ```
 
 ## Support Vector Machine
@@ -190,7 +190,7 @@ train <- createDataPartition(y = dat$covid_vaccination,
                                 p = 0.7,
                                 list = FALSE)
 
-# kernlab
+# SVM with Linear Kernal
 ctrl1 <- trainControl(method = "cv")
 set.seed(1)
 svml.fit <- train(covid_vaccination ~ . , 
@@ -203,6 +203,7 @@ svml.fit <- train(covid_vaccination ~ . ,
 plot(svml.fit, highlight = TRUE, xTrans = log)
 svml.fit$bestTune
 
+# SVM with Radial Kernel
 svmr.grid <- expand.grid(C = exp(seq(-1,4,len=20)),
                          sigma = exp(seq(-6,-2,len=20)))
 
