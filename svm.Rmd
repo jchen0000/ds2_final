@@ -66,28 +66,6 @@ plot(linear.tune)
 ```
 
 
-Radial
-```{r}
-set.seed(1)
-radial.tune <- tune.svm(covid_vaccination ~ . , 
-                        data = dat[train,], 
-                        kernel = "radial", 
-                        cost = exp(seq(-1, 4,len=20)),
-                        gamma = exp(seq(-6,-2,len=20)))
-
-plot(radial.tune, transform.y = log, transform.x = log, 
-     color.palette = terrain.colors)
-# summary(radial.tune)
-
-best.radial <- radial.tune$best.model
-summary(best.radial)
-
-pred.radial <- predict(best.radial, newdata = dat[-train,])
-
-confusionMatrix(data = pred.radial, 
-                reference = dat$covid_vaccination[-train])
-```
-
 ```{r}
 # kernlab
 ctrl1 <- trainControl(method = "cv")
@@ -100,6 +78,7 @@ svml.fit <- train(covid_vaccination ~ . ,
                   trControl = ctrl1)
 
 plot(svml.fit, highlight = TRUE, xTrans = log)
+svml.fit$bestTune
 ```
 
 ```{r}
@@ -114,10 +93,11 @@ svmr.fit <- train(covid_vaccination ~ . , dat,
                   tuneGrid = svmr.grid,
                   trControl = ctrl1)
 
-myCol<- rainbow(20)
+myCol <- rainbow(20)
 myPar <- list(superpose.symbol = list(col = myCol),
               superpose.line = list(col = myCol))
 
 plot(svmr.fit, highlight = TRUE, par.settings = myPar)
+svmr.fit$bestTune
 ```
 
