@@ -176,8 +176,6 @@ rf.fit <- train(covid_vaccination ~ . ,
                 trControl = rf.ctrl)
 
 ggplot(rf.fit, highlight = TRUE)
-
-rf.pred <- predict(rf.fit, newdata = data[-rowTrain,], type = "prob")[,1]
 ```
 
 ## Support Vector Machine
