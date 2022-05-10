@@ -102,7 +102,7 @@ save(x,y,x2,y2,file = "split_data.Rdata")
 ## Penalized logistic regression (GLMNET)
 
 ```{r}
-ctrl <- trainControl(method = "repeatedcv",
+ctrl <- trainControl(method = "cv",
                      summaryFunction = twoClassSummary,
                      classProbs = TRUE)
 
@@ -157,9 +157,9 @@ model.lda <- train(x, y,
 ## Random Forest
 
 ```{r}
-rf.ctrl <- trainControl(method = "cv",
-                     classProbs = TRUE,
-                     summaryFunction = twoClassSummary)
+# rf.ctrl <- trainControl(method = "cv",
+#                      classProbs = TRUE,
+#                      summaryFunction = twoClassSummary)
 
 rf.grid <- expand.grid(mtry = 1:8,
                        splitrule = "gini",
@@ -173,11 +173,9 @@ rf.fit <- train(covid_vaccination ~ . ,
                 method = "ranger",
                 tuneGrid = rf.grid,
                 metric = "ROC",
-                trControl = rf.ctrl)
+                trControl = ctrl)
 
 ggplot(rf.fit, highlight = TRUE)
-
-rf.pred <- predict(rf.fit, newdata = dat[-rowTrain,], type = "prob")[,1]
 ```
 
 ## Support Vector Machine
@@ -186,34 +184,34 @@ rf.pred <- predict(rf.fit, newdata = dat[-rowTrain,], type = "prob")[,1]
 data$covid_vaccination <- factor(data$covid_vaccination, c("vacc", "no_vacc"))
 dat <- data[-c(5,8,10,11,17,18)]
 summary(dat)
-train <- createDataPartition(y = dat$covid_vaccination,
-                                p = 0.7,
-                                list = FALSE)
 
-# kernlab
-ctrl1 <- trainControl(method = "cv")
+# SVM with Linear Kernal
+# ctrl1 <- trainControl(method = "cv")
 set.seed(1)
 svml.fit <- train(covid_vaccination ~ . , 
-                  data = dat[train,], 
+                  data = dat[rowTrain,], 
                   method = "svmLinear",
+                  metric = "ROC",
                   # preProcess = c("center", "scale"),
                   tuneGrid = data.frame(C = exp(seq(-5,2,len=50))),
-                  trControl = ctrl1)
+                  trControl = ctrl)
 
 plot(svml.fit, highlight = TRUE, xTrans = log)
 svml.fit$bestTune
 
+# SVM with Radial Kernel
 svmr.grid <- expand.grid(C = exp(seq(-1,4,len=20)),
                          sigma = exp(seq(-6,-2,len=20)))
 
 set.seed(1)             
 svmr.fit <- train(covid_vaccination ~ . , dat, 
-                  subset = train,
+                  subset = rowTrain,
                   method = "svmRadialSigma",
+                  metric = "ROC",
                   tuneGrid = svmr.grid,
-                  trControl = ctrl1)
+                  trControl = ctrl)
 
-myCol<- rainbow(20)
+myCol <- rainbow(20)
 myPar <- list(superpose.symbol = list(col = myCol),
               superpose.line = list(col = myCol))
 
@@ -300,15 +298,41 @@ bwplot(res, metric = "ROC")
 ## Test data performance
 
 ```{r}
+# # raw pred
+# glmn.pred <- predict(model.glmn, newdata = x2, type = "raw")
+# gam.pred <- predict(model.gam, newdata = data[-rowTrain,-c(7:8)], type = "raw")
+# lda.pred <- predict(model.lda, newdata = x2, type = "raw")
+# rf.pred <- predict(rf.fit, newdata = data[-rowTrain,], type = "raw")
+# 
+# svml.pred <- predict(svml.fit, newdata = dat[-rowTrain,], type = "raw")
+# svmr.pred <- predict(svmr.fit, newdata = dat[-rowTrain,], type = "raw")
+# 
+# pred_test <- model.nn %>% predict(x2) %>% k_argmax() %>% as.matrix() %>% as.numeric()
+# nn.pred = ifelse(pred_test==0,"no_vacc","vacc")
+# nn.pred = factor(nn.pred,levels = c("no_vacc","vacc"))
+# 
+# # Confusion Matrix
+# cm.glmn = confusionMatrix(data = glmn.pred, reference = y2, positive = "vacc")$overall
+# cm.gam = confusionMatrix(data = gam.pred, reference = y2, positive = "vacc")$overall
+# cm.lda = confusionMatrix(data = lda.pred, reference = y2, positive = "vacc")$overall
+# cm.rf = confusionMatrix(data = rf.pred, reference = y2, positive = "vacc")$overall
+# cm.svml = confusionMatrix(data = svml.pred, reference = y2, positive = "vacc")$overall
+# cm.svmr = confusionMatrix(data = svmr.pred, reference = y2, positive = "vacc")$overall
+# cm.nn = confusionMatrix(data = nn.pred, reference = y2, positive = "vacc")$overall
+# 
+# cm_df = data.frame(GLMN = cm.glmn, GAM = cm.gam, LDA = cm.lda, RF = cm.rf, SVML = cm.svml, SVMR = cm.svmr, NN = cm.nn)
+# knitr::kable(cm_df, digits = 4)
+```
+
+```{r}
 glmn.pred <- predict(model.glmn, newdata = x2, type = "prob")[,2]
 gam.pred <- predict(model.gam, newdata = data[-rowTrain,-c(7:8)], type = "prob")[,2]
 lda.pred <- predict(model.lda, newdata = x2, type = "prob")[,2]
 rf.pred <- predict(rf.fit, newdata = data[-rowTrain,], type = "prob")[,2]
-
-svml.pred <- predict(svml.fit, newdata = dat[-rowTrain,], type = "raw")
+svml.pred <- predict(svml.fit, newdata = dat[-rowTrain,], type = "prob")[,2]
 svmr.pred <- predict(svmr.fit, newdata = dat[-rowTrain,], type = "prob")[,2]
 
-pred_test <- nn %>% predict(x2)
+pred_test <- model.nn %>% predict(x2)
 nn.pred = pred_test[,2]
 
 roc.glmn <- roc(y2, glmn.pred)
@@ -324,7 +348,7 @@ auc <- c(roc.glmn$auc[1], roc.gam$auc[1], roc.lda$auc[1],roc.rf$auc[1],roc.svml$
 modelNames <- c("glmn","gam","lda","rf","svml","svmr","nn")
 
 # fig 5
-ggroc(list(roc.glmn, roc.gam, roc.lda, roc.rf, roc.svml, roc.svmr, roc.nn), legacy.axes = TRUE) + 
+ggroc(list(roc.glmn, roc.gam, roc.lda, roc.rf,roc.svml, roc.svmr, roc.nn), legacy.axes = TRUE) + 
   scale_color_discrete(labels = paste0(modelNames, " (", round(auc,3),")"),
                        name = "Models (AUC)") +
   geom_abline(intercept = 0, slope = 1, color = "grey")
