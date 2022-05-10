@@ -340,7 +340,11 @@ score
 ```{r}
 res <- resamples(list(GLMNET = model.glmn, 
                       GAM = model.gam,
-                      LDA = model.lda))
+                      LDA = model.lda,
+                      RF = rf.fit,
+                      SVML = svml.fit,
+                      SVMR = svmr.fit,
+                      NN = fit.nn))
 
 #KNN
 summary(res)
