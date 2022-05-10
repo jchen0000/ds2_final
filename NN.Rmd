@@ -1,0 +1,149 @@
+---
+title: "NN"
+author: "Yiru Gong, yg2832"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, echo = T, message = FALSE, results='hide', warning=FALSE}
+library(tidyverse)
+library(summarytools)
+library(corrplot)
+library(caret)
+library(MASS)
+library(mlbench)
+library(pROC) #ROCR
+library(pdp)
+library(vip)
+library(AppliedPredictiveModeling) #for transparentTheme function
+library(ISLR)
+library(caret)
+library(e1071)
+library(kernlab)
+library(keras)
+library(tfruns)
+```
+
+# Data Input
+
+```{r,results = 'asis'}
+data = read.csv('Covid19_vacc_predict_handout.csv')
+data = data %>% 
+  na.omit() %>% 
+  dplyr::select(-id) %>% 
+  mutate(
+    atlas_type_2015_mining_no = factor(atlas_type_2015_mining_no),
+    covid_vaccination = factor(covid_vaccination),
+    hum_region = factor(hum_region),
+    sex_cd = factor(sex_cd),
+    race_cd = factor(race_cd),
+    lang_spoken_cd = factor(lang_spoken_cd),
+    atlas_low_education_2015_update = factor(atlas_low_education_2015_update)
+    )
+# summary(data)
+# by(data[,c(5,7,8,10,11,17,18)], data$covid_vaccination, summary)
+dfSummary(data[,c(5,7,8,10,11,17,18)])
+
+# cat_sum = NULL
+# for (n in c(5,8,10,11,17,18)){
+#   cat = data[,c(n,7)]
+#   name = colnames(cat)[1]
+#   cat2 = cat %>% 
+#     group_by(covid_vaccination,cat[,1]) %>% 
+#     count() %>% 
+#     rename(cat=`cat[, 1]`) %>% 
+#     pivot_wider(
+#       names_from = covid_vaccination,
+#       values_from = n
+#     ) %>% 
+#     mutate(variable = name) %>% 
+#     relocate(variable,everything())
+#   cat_sum = rbind(cat_sum,cat2)
+# }
+# knitr::kable(cat_sum)
+
+# cat_sum %>% 
+#   pivot_longer(
+#     c("no_vacc","vacc"),
+#     names_to = 'covid_vaccination',
+#     values_to = 'count'
+#   ) %>% 
+#   ggplot(aes(variable,count,group=covid_vaccination,fill=cat))+geom_bar(stat = 'identity') 
+
+data2 = model.matrix(covid_vaccination ~ ., data)[ ,-1]
+```
+
+## Data split
+
+```{r}
+set.seed(1)
+rowTrain <- createDataPartition(y = data$covid_vaccination,
+                                p = 0.7,
+                                list = FALSE)
+x = data2[rowTrain,]
+y = data$covid_vaccination[rowTrain]
+x2 = data2[-rowTrain,]
+y2 = data$covid_vaccination[-rowTrain]
+
+save(x,y,x2,y2,file = "split_data.Rdata")
+```
+
+## Neural Network
+
+```{r}
+## tuning
+set.seed(1)
+runs <- tuning_run("keras_grid_search.R", 
+                   flags = list(
+                   nodes_layer1 = c(64, 128, 256),
+                   nodes_layer2 = c(64, 128, 256),
+                   nodes_layer3 = c(64, 128, 256),
+                   dropout_layer1 = c(0.2, 0.3, 0.4),
+                   dropout_layer2 = c(0.2, 0.3, 0.4),
+                   dropout_layer3 = c(0.2, 0.3, 0.4)),
+                   confirm = FALSE,
+                   echo = FALSE,
+                   sample = 0.01) # try more after class
+
+best = runs[which.max(runs$metric_val_accuracy),] 
+```
+
+```{r}
+y_c = ifelse(y=="vacc",1,0)
+y_c <- to_categorical(y_c, 2)
+y2_c = ifelse(y2=="vacc",1,0)
+y2_c <- to_categorical(y2_c, 2)
+
+model.nn <- keras_model_sequential() %>%
+  layer_dense(units = best$flag_nodes_layer1, activation = "relu", input_shape = ncol(x)) %>%
+  layer_batch_normalization() %>%
+  layer_dropout(rate = best$flag_dropout_layer1) %>%
+  layer_dense(units = best$flag_nodes_layer2, activation = "relu") %>%
+  layer_batch_normalization() %>%
+  layer_dropout(rate = best$flag_dropout_layer2) %>%
+  layer_dense(units = best$flag_nodes_layer3, activation = "relu") %>%
+  layer_batch_normalization() %>%
+  layer_dropout(rate = best$flag_dropout_layer3) %>%
+  layer_dense(units = 2, activation = "sigmoid") %>%
+  compile(loss = "categorical_crossentropy",
+          optimizer = optimizer_rmsprop(), 
+          metrics = "accuracy") 
+fit.nn = model.nn %>% 
+  fit(x = x, 
+      y = y_c, 
+      epochs = 30, 
+      batch_size = 256,
+      validation_split = 0.2,
+      callbacks = list(callback_early_stopping(patience = 5),
+                       callback_reduce_lr_on_plateau()),
+      verbose = 2)
+plot(fit.nn)
+
+## testing and evaluation
+score <- model.nn %>% evaluate(x2, y2_c)
+score
+```

@@ -326,7 +326,7 @@ fit.nn = model.nn %>%
       callbacks = list(callback_early_stopping(patience = 5),
                        callback_reduce_lr_on_plateau()),
       verbose = 2)
-plot(model.nn)
+plot(fit.nn)
 
 ## testing and evaluation
 score <- model.nn %>% evaluate(x2, y2_c)
