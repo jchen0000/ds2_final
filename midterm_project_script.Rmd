@@ -303,7 +303,7 @@ bwplot(res, metric = "ROC")
 glmn.pred <- predict(model.glmn, newdata = x2, type = "prob")[,2]
 gam.pred <- predict(model.gam, newdata = data[-rowTrain,-c(7:8)], type = "prob")[,2]
 lda.pred <- predict(model.lda, newdata = x2, type = "prob")[,2]
-rf.pred <- predict(rf.fit, newdata = x2, type = "prob")[,2]
+rf.pred <- predict(rf.fit, newdata = data[-rowTrain,], type = "prob")[,2]
 
 svml.pred <- predict(svml.fit, newdata = dat[-rowTrain,], type = "prob")[,2]
 svmr.pred <- predict(svmr.fit, newdata = dat[-rowTrain,], type = "prob")[,2]
@@ -314,14 +314,17 @@ nn.pred = pred_test[,2]
 roc.glmn <- roc(y2, glmn.pred)
 roc.gam <- roc(y2, gam.pred)
 roc.lda <- roc(y2, lda.pred)
+roc.rf <- roc(y2, rf.pred)
+roc.svml <- roc(y2,svml.pred)
+roc.svmr <- roc(y2,svmr.pred)
 roc.nn = roc(y2,nn.pred)
 
-auc <- c(roc.glmn$auc[1], roc.gam$auc[1], roc.lda$auc[1], roc.nn$auc[1])
+auc <- c(roc.glmn$auc[1], roc.gam$auc[1], roc.lda$auc[1],roc.rf$auc[1],roc.svml$auc[1],roc.svmr$auc[1], roc.nn$auc[1])
 
-modelNames <- c("glmn","gam","lda","nn")
+modelNames <- c("glmn","gam","lda","rf","svml","svmr","nn")
 
 # fig 5
-ggroc(list(roc.glmn, roc.gam, roc.lda, roc.nn), legacy.axes = TRUE) + 
+ggroc(list(roc.glmn, roc.gam, roc.lda, roc.rf, roc.svml, roc.svmr, roc.nn), legacy.axes = TRUE) + 
   scale_color_discrete(labels = paste0(modelNames, " (", round(auc,3),")"),
                        name = "Models (AUC)") +
   geom_abline(intercept = 0, slope = 1, color = "grey")
