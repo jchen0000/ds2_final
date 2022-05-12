@@ -110,6 +110,7 @@ runs <- tuning_run("keras_grid_search.R",
                    sample = 0.01) # try more after class
 
 best = runs[which.max(runs$metric_val_accuracy),] 
+best
 ```
 
 ```{r}
@@ -132,6 +133,8 @@ model.nn <- keras_model_sequential() %>%
   compile(loss = "categorical_crossentropy",
           optimizer = optimizer_rmsprop(), 
           metrics = "accuracy") 
+summary(model.nn)
+
 fit.nn = model.nn %>% 
   fit(x = x, 
       y = y_c, 

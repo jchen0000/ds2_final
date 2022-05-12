@@ -41,6 +41,7 @@ library(ISLR)
 library(caret)
 library(e1071)
 library(kernlab)
+library(ranger)
 ```
 
 # Data Input
@@ -178,6 +179,24 @@ rf.fit <- train(covid_vaccination ~ . ,
 ggplot(rf.fit, highlight = TRUE)
 ```
 
+```{r}
+# variable importance
+set.seed(1)
+rf2.final.per <- ranger(covid_vaccination ~ . ,
+                data[rowTrain,],
+                mtry = rf.fit$bestTune[[1]],
+                min.node.size = rf.fit$bestTune[[3]],
+                splitrule = "gini",
+                importance = "permutation",
+                scale.permutation.importance = TRUE)
+
+par(mar = c(3,12,3,3))
+barplot(sort(ranger::importance(rf2.final.per), decreasing = FALSE),
+        las = 2, horiz = TRUE, cex.names = 0.7, 
+        col = colorRampPalette(colors = c("cyan","blue"))(8))
+```
+
+
 ## Support Vector Machine
 
 ```{r}
@@ -237,7 +256,8 @@ runs <- tuning_run("keras_grid_search.R",
                    echo = FALSE,
                    sample = 0.01) # try more after class
 
-best = runs[which.max(runs$metric_val_accuracy),] 
+best = runs[which.max(runs$metric_val_accuracy),]
+best
 ```
 
 ```{r}
