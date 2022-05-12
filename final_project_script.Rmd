@@ -193,7 +193,7 @@ rf2.final.per <- ranger(covid_vaccination ~ . ,
 par(mar = c(3,12,3,3))
 barplot(sort(ranger::importance(rf2.final.per), decreasing = FALSE),
         las = 2, horiz = TRUE, cex.names = 0.7, 
-        col = colorRampPalette(colors = c("cyan","blue"))(8))
+        col = colorRampPalette(colors = c("cyan","blue"))(17))
 ```
 
 
